@@ -4,8 +4,11 @@
 import argparse
 import os
 import yaml
+import numpy as np
 from auxiliary.laserscan import LaserScan, SemLaserScan
 from auxiliary.laserscanextract import LaserScanExtract
+from auxiliary.meshgenerator import meshGen
+
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser("./visualize.py")
@@ -147,9 +150,21 @@ if __name__ == '__main__':
   instances = FLAGS.do_instances
   if not semantics:
     label_names = None
+
+  # Extract objects from LiDAR scans
   extractor = LaserScanExtract(scan=scan,
                      scan_names=scan_names,
                      label_names=label_names,
                      offset=FLAGS.offset,
                      semantics=semantics, instances=instances and semantics,
                      classid=30)
+  clusters = extractor.update_scan()
+
+  # check the dimension of each cluster, if it is too big, there are more than one objects in the cluster
+  for num, cluster in enumerate(clusters):
+    cluster_dimensions = cluster.max(axis=0)-cluster.min(axis=0)
+    if cluster_dimensions[0] < 2 and cluster_dimensions[1] < 2 and cluster_dimensions[2] < 2.1 and cluster_dimensions[2]>1.2:
+      mesh = meshGen(cluster)
+      # mesh.show_mesh()
+      header = "person"
+      mesh.save_points_us(header)

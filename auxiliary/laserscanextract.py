@@ -27,7 +27,7 @@ class LaserScanExtract:
       raise ValueError
 
     # self.reset()
-    self.update_scan()
+    # self.update_scan()
 
   def reset(self):
     """ Reset. """
@@ -128,6 +128,7 @@ class LaserScanExtract:
 
   def update_scan(self):
     count = 0
+    clusters = []
     for offset, name in enumerate(self.scan_names):
       self.scan.open_scan(self.scan_names[offset])
       if self.semantics:
@@ -135,11 +136,14 @@ class LaserScanExtract:
 
       ind = np.where(self.scan.sem_label==self.classid)
 
-      if ind[0].size > 50:
+      if ind[0].size > 200:
         print(self.scan_names[offset], ind[0].size)
         cluster = np.hstack((self.scan.points[ind[0], :], np.expand_dims(self.scan.remissions[ind[0]], axis=1) ))
-        np.savetxt("cluster"+str(ind[0].size)+"_"+str(count)+".txt", cluster )
+        clusters.append(cluster)
+        # np.savetxt("cluster"+str(ind[0].size)+"_"+str(count)+".txt", cluster )
         count += 1
+        
+    return clusters
 
   # interface
   def key_press(self, event):
