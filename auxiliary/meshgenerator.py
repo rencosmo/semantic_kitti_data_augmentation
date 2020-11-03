@@ -2,6 +2,9 @@
 # This file is covered by the LICENSE file in the root of this project.
 import open3d as o3d
 import numpy as np
+import numba as nb
+
+import matplotlib.pyplot as plt
 
 class meshGen:
   """Class that creates and handles a visualizer for a pointcloud"""
@@ -33,16 +36,47 @@ class meshGen:
     self.points_us = points_us
 
   # Upsampling the clusters
+  #@nb.jit(???,nopython=True)
   def upsample(self):
-    azi_interval = 0.0032
-    azi = np.arctan2(self.points[:, 1], self.points[:, 0])
-    ele = np.arctan2(self.points[:, 2], np.sqrt(self.points[:, 0]*self.points[:, 0]+self.points[:, 1]*self.points[:, 1]) )
+    # increase the horinzontal density
+    points = self.points
+    for i in range(0, self.points.shape[0]-1):
+      gap = np.linalg.norm(self.points[i+1, 0:3] - self.points[i, 0:3])
+      if gap<0.05:
+        points_add = (self.points[i+1, :] - self.points[i, :])/4
+        for k in range(1, 4):
+          interp_point = self.points[i, :] + points_add * k
+          points = np.r_[points, interp_point.reshape(-1, 4)]
+
+    azi_interval = 0.0006
+    azi = np.arctan2(points[:, 1], points[:, 0])
+    ele = np.arctan2(points[:, 2], np.sqrt(points[:, 0]*points[:, 0]+points[:, 1]*points[:, 1]) )
     azi_step = np.arange(azi.min(), azi.max(), azi_interval)
     
     points_us = np.empty([0, 4])
     for azi0 in azi_step:
       index = np.where( (azi>=azi0) & (azi<azi0+azi_interval) )
-      col_points = self.points[index]
+      col_points = points[index]
+      col_ele = ele[index]
+      col_index = np.argsort(col_ele)
+      col_ele_sorted = col_ele[col_index]
+      col_points_sorted = col_points[col_index]
+      for j in range(0, col_points_sorted.shape[0]-1):
+        gap_vert = np.linalg.norm(col_points_sorted[j+1, 0:3] - col_points_sorted[j, 0:3])
+        if gap_vert < 0.2:
+          points_add = (col_points_sorted[j+1, :] - col_points_sorted[j, :])/6
+          for k in range(1, 6):
+            interp_point = col_points_sorted[j, :] + points_add * k
+            points_us = np.r_[points_us, interp_point.reshape(-1, 4)]
+        else:
+          points_us = np.r_[points_us, col_points_sorted[j+1, :].reshape(-1, 4)]
+          points_us = np.r_[points_us, col_points_sorted[j, :].reshape(-1, 4)]
+
+      
+    '''
+    for azi0 in azi_step:
+      index = np.where( (azi>=azi0) & (azi<azi0+azi_interval) )
+      col_points = points[index]
       col_ele = ele[index]
       col_index = np.argsort(col_ele)
       col_ele_sorted = col_ele[col_index]
@@ -58,6 +92,8 @@ class meshGen:
         points_us = np.append(points_us,  col_points_sorted, axis=0)
       else:
         points_us = np.append(points_us,  col_points_sorted, axis=0)
+    '''
+
     self.points_us = points_us
 
 

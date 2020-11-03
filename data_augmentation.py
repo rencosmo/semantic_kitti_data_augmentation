@@ -48,10 +48,8 @@ def cluster_translate(cluster, anchor):
  
   return cluster_trans, cluster_label
 
-
-def injectObj(scan, label):
+def injectObj(scan, label, model_path):
   # Read model library
-  model_path = '/home/cosmo/workspace/dataaug/person/'
   model_names = os.listdir(model_path)
   model_distances = []
 
@@ -103,21 +101,20 @@ def scanline_shadow_gen(scan, label, ori_scan_num):
 
   # generate the range image of original points
   proj_H=64
-  proj_W=1024
+  proj_W=2048
   proj_fov_up=3.0
   proj_fov_down=-25.0
   proj_fov_up = proj_fov_up / 180.0 * np.pi      # field of view up in rad
   proj_fov_down = proj_fov_down / 180.0 * np.pi       # field of view down in rad
   fov = abs(proj_fov_down) + abs(proj_fov_up)    # get field of view total in rad
 
-  '''
+  # Project  
   depth_ori = np.linalg.norm(scan_ori[:, :3], 2, axis=1)
   yaw_ori = -np.arctan2(scan_ori[:, 1], scan_ori[:, 0])
   pitch_ori = np.arcsin(scan_ori[:, 2] / depth_ori)
 
-  # get projections in image coords
-  proj_x_ori = 0.5 * (yaw_ori / np.pi + 1.0)                  # in [0.0, 1.0]
-  proj_y_ori = 1.0 - (pitch_ori + abs(fov_down)) / fov        # in [0.0, 1.0]
+  proj_x_ori = 0.5 * (yaw_ori / np.pi + 1.0)                       # in [0.0, 1.0]
+  proj_y_ori = 1.0 - (pitch_ori + abs(proj_fov_down)) / fov        # in [0.0, 1.0]
 
   proj_x_ori *= proj_W                              # in [0.0, W]
   proj_y_ori *= proj_H                              # in [0.0, H]
@@ -129,9 +126,8 @@ def scanline_shadow_gen(scan, label, ori_scan_num):
   proj_y_ori = np.floor(proj_y_ori)
   proj_y_ori = np.minimum(proj_H - 1, proj_y_ori)
   proj_y_ori = np.maximum(0, proj_y_ori).astype(np.int32)   # in [0,H-1]
-  '''
 
-  # Project injected points 
+  # Project injected points into range image
   depth_inject = np.linalg.norm(scan_inject[:, :3], 2, axis=1)
   yaw_inject = -np.arctan2(scan_inject[:, 1], scan_inject[:, 0])
   pitch_inject = np.arcsin(scan_inject[:, 2] / depth_inject)
@@ -161,17 +157,21 @@ def scanline_shadow_gen(scan, label, ori_scan_num):
                                  dtype=np.int32)
   proj_indices_inject[proj_y_inject, proj_x_inject] = indices_inject
 
-  plt.matshow(proj_indices_inject)
-  plt.show()
   idx_inject_pts = proj_indices_inject[proj_indices_inject>0]
   scan_inject = scan_inject[idx_inject_pts, :]
   label_inject = label_inject[idx_inject_pts]
 
-  scan = np.vstack((scan_ori, scan_inject))
-  label = np.hstack((label_ori, label_inject))
+  proj_bool = (proj_indices_inject>0)
+  
+  ind_no_inject = np.where( proj_bool[proj_y_ori, proj_x_ori]==False )
+  scan_aug = scan_ori[ind_no_inject[0], :]
+  label_aug = label_ori[ind_no_inject[0]]
 
-  return scan, label
+  scan_aug = np.vstack((scan_aug, scan_inject))
+  label_aug = np.hstack((label_aug, label_inject))
 
+  print(scan_aug.shape)
+  return scan_aug, label_aug
 
 
 def scan_display(scan, label):
@@ -212,14 +212,9 @@ if __name__ == '__main__':
   label = np.fromfile(filename_label, dtype=np.uint32)
   label = label.reshape((-1))
 
+  model_path = '/home/cosmo/workspace/dataaug/person/'
+
   ori_scan_num = scan.shape[0]
-  scan, label = injectObj(scan, label)
-
+  scan, label = injectObj(scan, label, model_path)
   scan, label = scanline_shadow_gen(scan, label, ori_scan_num)
-  
   scan_display(scan, label)
-
-
-
-
-
