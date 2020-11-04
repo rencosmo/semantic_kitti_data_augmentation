@@ -72,28 +72,6 @@ class meshGen:
           points_us = np.r_[points_us, col_points_sorted[j+1, :].reshape(-1, 4)]
           points_us = np.r_[points_us, col_points_sorted[j, :].reshape(-1, 4)]
 
-      
-    '''
-    for azi0 in azi_step:
-      index = np.where( (azi>=azi0) & (azi<azi0+azi_interval) )
-      col_points = points[index]
-      col_ele = ele[index]
-      col_index = np.argsort(col_ele)
-      col_ele_sorted = col_ele[col_index]
-      col_points_sorted = col_points[col_index]
-      if col_ele_sorted.shape[0]>=4:
-        ele_step = np.arange(col_ele_sorted.min(), col_ele_sorted.max(), azi_interval)
-        x = np.interp(ele_step, col_ele_sorted, col_points_sorted[:, 0])
-        y = np.interp(ele_step, col_ele_sorted, col_points_sorted[:, 1])
-        z = np.interp(ele_step, col_ele_sorted, col_points_sorted[:, 2])
-        i = np.interp(ele_step, col_ele_sorted, col_points_sorted[:, 3])
-        col_group = np.hstack((x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1), i.reshape(-1, 1)))
-        points_us = np.append(points_us, col_group, axis=0)
-        points_us = np.append(points_us,  col_points_sorted, axis=0)
-      else:
-        points_us = np.append(points_us,  col_points_sorted, axis=0)
-    '''
-
     self.points_us = points_us
 
 
@@ -117,7 +95,6 @@ class meshGen:
     self.mesh = rec_mesh
 
   def show_mesh(self):
-    # print("============================: ", self.points_us.shape, self.points.shape)
     xyz = self.points_us[:, 0:3]
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz)

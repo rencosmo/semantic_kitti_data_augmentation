@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # This file is covered by the LICENSE file in the root of this project.
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import open3d as o3d
 import os
 
@@ -13,7 +13,7 @@ def boundingbox(scan, label, bound):
   index = np.where( (scan[:, 0]>xmin) & (scan[:, 0]<xmax) & (scan[:, 1]>ymin) & (scan[:, 1]<ymax) )
   return scan[index[0], :], label[index[0]]
 
-def cluster_translate(cluster, anchor):
+def cluster_translate(cluster, anchor, model_label):
   cluster_x_mean = np.average(cluster[:, 0])
   cluster_y_mean = np.average(cluster[:, 1])
   cluster_z_min = np.min(cluster[:, 2])
@@ -44,11 +44,28 @@ def cluster_translate(cluster, anchor):
   cluster_trans[:, 1] = cluster_trans[:, 1] + anchor[1]
   cluster_trans[:, 2] = cluster_trans[:, 2] + anchor[2]
   
-  cluster_label = np.full((cluster.shape[0],), 30)
+  cluster_label = np.full((cluster.shape[0],), model_label)
  
   return cluster_trans, cluster_label
 
-def injectObj(scan, label, model_path):
+
+def injectObj(scan, label, model_path, model_label, bb_dim, model_num, freeSpaceTypes, freeSpaceTypesProb):
+# Input:	
+#   scan, label: original scan and label from semantic kitti 
+#   model_path: path of model files
+#   bb_dim: bounding box size which is used to find the free space for injection
+#   model_num: how many models are injected into to background
+#   freeSpaceTypes: list, lables for free space search. usually use road, parking, sidewalk, other ground [40, 44, 48, 49] 
+#   freeSpaceTypesProb: list, possibility of the anchor point position. For example, freespaceTypes is [40, 44, 48, 49]
+#                       freeSpaceTypesProb can be [0.7, 0.1, 0.1, 0.1]. It means that 70% of the anchor points are on the road,
+#                       10% on each other three classes
+# Output:
+#   scan, Nx4 numpy array, point cloud with the injected 
+#   label, labels after model injection\
+
+  # Points number in the original point cloud
+  ori_scan_num = scan.shape[0]
+
   # Read model library
   model_names = os.listdir(model_path)
   model_distances = []
@@ -60,35 +77,44 @@ def injectObj(scan, label, model_path):
     model_distances.append(float(model_dis)/100.0)
   model_distances = np.asarray(model_distances)
 
-  # Find the road, sidewalk and parking in the original scan  
-  index0 = np.where(label==48)
-  sidewalk = scan[index0[0], :]
-  
-  index1 = np.where(label==40)
-  road = scan[index1[0], :]
+  # Find points of the free space
+  freespace = np.empty([0, 4])
+  freeSpaceTypesProbVec = np.empty([0])
+  for i, freeSpaceType in enumerate(freeSpaceTypes):
+    index = np.where(label==freeSpaceType)
+    if index[0].shape[0]>0:
+      freespace = np.vstack((freespace, scan[index[0], :]))
+      prob_part = np.full(scan[index[0], :].shape[0], freeSpaceTypesProb[i])
+      freeSpaceTypesProbVec = np.hstack((freeSpaceTypesProbVec, prob_part))
 
-  index2 = np.where(label==44)
-  parking = scan[index2[0], :]
+  # For uniform sampling base on the density
+  freespace_dense = (freespace[:,0]**2 + freespace[:,1]**2)**(3/2)/(freespace[:,0]**2 + freespace[:,1]**2+freespace[:,2]**2)**(1/2) * freeSpaceTypesProbVec
+  # freespace_dense = (freespace[:,0]**2 + freespace[:,1]**2) * freeSpaceTypesProbVec
+  freespace_dense = freespace_dense/np.sum(freespace_dense)
 
-  # find a sidewalk point randomly
-  for i in range(0, 800):
-    ind = np.random.choice(sidewalk.shape[0]-1, 1)
-    bound = [sidewalk[ind, 0]-1, sidewalk[ind, 0]+1, sidewalk[ind, 1]-1, sidewalk[ind, 1]+1]
-    box_points, box_label = boundingbox(scan, label, bound)
-    dh = np.max(box_points[:, 2])-np.min(box_points[:, 2])
-    anchor = [sidewalk[ind, 0][0], sidewalk[ind, 1][0], np.max(box_points[:, 2])]
-    # no other object in the bounding box
-    if dh<0.3:
-      # distance of the bounding box
-      distance = np.sqrt(sidewalk[ind, 0]*sidewalk[ind, 0] + sidewalk[ind, 1]*sidewalk[ind, 1])
-      # find the model with suitable distance
-      model_index = np.where( (model_distances<10.0) & (model_distances>3.0) ) #distance)
-      if model_index[0].shape[0]>0:
-        model_num = np.random.choice(model_index[0], 1) # chosen a model
-        cluster = np.load(model_path+model_names[model_num[0]]) # load model
-        cluster_trans, cluster_label = cluster_translate(cluster, anchor)
-        scan = np.vstack((scan, cluster_trans))
-        label = np.hstack((label, cluster_label))
+  # find a freespace point randomly
+  if freespace.shape[0] > 0:
+    for i in range(0, model_num):
+      ind = np.random.choice(np.arange(0,freespace.shape[0],1), 1, p=freespace_dense)
+      bound = [freespace[ind, 0]-bb_dim/2, freespace[ind, 0]+bb_dim/2, freespace[ind, 1]-bb_dim/2, freespace[ind, 1]+bb_dim/2]
+      box_points, box_label = boundingbox(scan, label, bound)
+      dh = np.max(box_points[:, 2])-np.min(box_points[:, 2])
+      anchor = [freespace[ind, 0][0], freespace[ind, 1][0], np.max(box_points[:, 2])]
+      # no other object in the bounding box
+      if dh<0.3:
+        # distance of the bounding box
+        distance = np.sqrt(freespace[ind, 0]*freespace[ind, 0] + freespace[ind, 1]*freespace[ind, 1])
+        # find the model with suitable distance
+        model_index = np.where( (model_distances<=distance) & (model_distances>=distance-10 ) )
+        if model_index[0].shape[0]>0:
+          model_num = np.random.choice(model_index[0], 1) # chosen a model
+          cluster = np.load(model_path+model_names[model_num[0]]) # load model
+          cluster_trans, cluster_label = cluster_translate(cluster, anchor, model_label)
+          scan = np.vstack((scan, cluster_trans))
+          label = np.hstack((label, cluster_label))
+
+  scan, label = scanline_shadow_gen(scan, label, ori_scan_num)
+
   return scan, label
 
 def scanline_shadow_gen(scan, label, ori_scan_num):
@@ -170,33 +196,56 @@ def scanline_shadow_gen(scan, label, ori_scan_num):
   scan_aug = np.vstack((scan_aug, scan_inject))
   label_aug = np.hstack((label_aug, label_inject))
 
-  print(scan_aug.shape)
   return scan_aug, label_aug
 
-
 def scan_display(scan, label):
-  '''
-  road_pcd = o3d.geometry.PointCloud()
-  road_pcd.points = o3d.utility.Vector3dVector(road[:, 0:3])
-  road_pcd.paint_uniform_color([1, 0, 0])
-  '''
+# Display the labelled point cloud of semantic kitti
+  color_map = {0: [0, 0, 0],
+  1: [0, 0, 255],
+  10: [245, 150, 100],
+  11: [245, 230, 100],
+  13: [250, 80, 100],
+  15: [150, 60, 30],
+  16: [255, 0, 0],
+  18: [180, 30, 80],
+  20: [255, 0, 0],
+  30: [30, 30, 255],
+  31: [200, 40, 255],
+  32: [90, 30, 150],
+  40: [255, 0, 255],
+  44: [255, 150, 255],
+  48: [75, 0, 75],
+  49: [75, 0, 175],
+  50: [0, 200, 255],
+  51: [50, 120, 255],
+  52: [0, 150, 255],
+  60: [170, 255, 150],
+  70: [0, 175, 0],
+  71: [0, 60, 135],
+  72: [80, 240, 150],
+  80: [150, 240, 255],
+  81: [0, 0, 255],
+  99: [255, 255, 50],
+  252: [245, 150, 100],
+  256: [255, 0, 0],
+  253: [200, 40, 255],
+  254: [30, 30, 255],
+  255: [90, 30, 150],
+  257: [250, 80, 100],
+  258: [180, 30, 80],
+  259: [255, 0, 0]}
 
-  sidewalk_ind = np.where(label==48)
-  sidewalk_pcd = o3d.geometry.PointCloud()
-  sidewalk_pcd.points = o3d.utility.Vector3dVector(scan[sidewalk_ind[0], 0:3])
-  sidewalk_pcd.paint_uniform_color([0.294, 0, 0.294])
+  colors = []
+  for key in label:
+    colors.append( color_map.get(key) )
 
-  background_ind = np.where((label!=30) & (label!=48))
+  colors = np.fliplr(np.array(colors))/255
+
   pcd = o3d.geometry.PointCloud()
-  pcd.points = o3d.utility.Vector3dVector(scan[background_ind[0], 0:3])
-  pcd.paint_uniform_color([0.65, 0.65, 0.65])
-
-  person_ind = np.where(label==30)
-  person_pcd = o3d.geometry.PointCloud()
-  person_pcd.points = o3d.utility.Vector3dVector(scan[person_ind[0], 0:3])
-  person_pcd.paint_uniform_color([1, 0, 0]) 
-
-  o3d.visualization.draw_geometries([pcd, person_pcd, sidewalk_pcd])
+  print(scan.shape, colors.shape)
+  pcd.points = o3d.utility.Vector3dVector(scan[:, 0:3])
+  pcd.colors = o3d.utility.Vector3dVector(colors)
+  o3d.visualization.draw_geometries([pcd])
   
 
 if __name__ == '__main__':
@@ -210,11 +259,12 @@ if __name__ == '__main__':
   # read label
   filename_label = '/home/cosmo/workspace/Datasets/dataset/sequences/00/labels/000000.label'
   label = np.fromfile(filename_label, dtype=np.uint32)
-  label = label.reshape((-1))
+  label = label.reshape((-1)) & 0xFFFF
 
   model_path = '/home/cosmo/workspace/dataaug/person/'
 
   ori_scan_num = scan.shape[0]
-  scan, label = injectObj(scan, label, model_path)
-  scan, label = scanline_shadow_gen(scan, label, ori_scan_num)
+  bb_dim = 1.0
+  model_label = 30
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 100, [40, 44, 48], [0.80, 0.1, 0.1])
   scan_display(scan, label)
