@@ -9,6 +9,8 @@ from auxiliary.laserscan import LaserScan, SemLaserScan
 from auxiliary.laserscanextract import LaserScanExtract
 from auxiliary.meshgenerator import meshGen
 
+import matplotlib.pyplot as plt
+
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser("./visualize.py")
@@ -151,21 +153,46 @@ if __name__ == '__main__':
   if not semantics:
     label_names = None
 
-  # Extract objects from LiDAR scans
-  extractor = LaserScanExtract(scan=scan,
-                     scan_names=scan_names,
-                     label_names=label_names,
-                     offset=FLAGS.offset,
-                     semantics=semantics, instances=instances and semantics,
-                     classid=255)
-  clusters = extractor.update_scan()
+  libclass = [11, 13, 15, 16, 18, 20, 30, 31, 32, 253, 254, 255, 256, 257, 258, 259]
 
-  # check the dimension of each cluster, if it is too big, there are more than one objects in the cluster
-  for num, cluster in enumerate(clusters):
-    cluster_dimensions = cluster.max(axis=0)-cluster.min(axis=0)
-    print(cluster_dimensions)
-    if cluster_dimensions[0] < 2.5 and cluster_dimensions[1] < 2.5 and cluster_dimensions[2] < 2.1 and cluster_dimensions[2]>1.0:
-      mesh = meshGen(cluster)
-      # mesh.show_mesh()
-      header = "movingmotorcyclist"
-      mesh.save_points_us(header)
+  classes = {11: ["bicycle", 200, 2.5, 2.5, 1.0, 1.6],
+             13: ["bus", 200, 5.0, 5.0, 2.0, 4.0],                                       #
+             15: ["motorcycle", 200, 2.5, 2.5, 1.0, 1.6],
+             16: ["on-rails", 200, 5.0, 5.0, 2.0, 4.0],                                  #
+             18: ["truck", 200, 5.0, 5.0, 1.8, 4.0],
+             20: ["other-vehicle", 200, 4.0, 4.0, 1.2, 2.6],
+             30: ["person", 200, 1.8, 1.8, 1.2, 1.8],
+             31: ["bicyclist", 200, 2.5, 2.5, 1.4, 1.8],
+             32: ["motorcyclist", 200, 2.8, 2.8, 1.4, 1.8],                              #
+             71: ["trunk", 80, 2.0, 2.0, 1.8, 4.5],
+             80: ["pole", 80, 1.0, 1.0, 2.0, 4.5],
+             81: ["traffic-sign", 30, 1.5, 1.5, 0.1, 2.0],
+             99: ["other-object", 30, 3.0, 3.0, 0.8, 4.0],
+             253: ["moving-bicyclist", 200, 2.5, 2.5, 1.4, 1.8],
+             254: ["moving-person", 200, 1.8, 1.8, 1.2, 2.0],
+             255: ["moving-motorcyclist", 200, 2.8, 2.8, 1.4, 1.8],
+             256: ["moving-on-rails", 200, 5.0, 5.0, 2.0, 4.0],                          #
+             257: ["moving-bus", 200, 5.0, 5.0, 2.0, 4.0],
+             258: ["moving-truck", 200, 5.0, 5.0, 2.0, 4.0],
+             259: ["moving-other-vehicle", 200, 5.0, 5.0, 1.2, 4.0]}
+
+  for key in classes.keys():
+    if key not in libclass:
+      continue
+    # Extract objects from LiDAR scans
+    extractor = LaserScanExtract(scan=scan,
+                       scan_names=scan_names,
+                       label_names=label_names,
+                       offset=FLAGS.offset,
+                       semantics=semantics, instances=instances and semantics,
+                       classid=key, min_point_num=classes[key][1])
+    clusters = extractor.update_scan()
+
+    # check the dimension of each cluster, if it is too big, there are more than one objects in the cluster
+    for num, cluster in enumerate(clusters):
+      cluster_dimensions = cluster.max(axis=0)-cluster.min(axis=0)
+
+      if cluster_dimensions[0] < classes[key][2] and cluster_dimensions[1]<classes[key][3] and cluster_dimensions[2]>classes[key][4] and cluster_dimensions[2]<classes[key][5]:
+        mesh = meshGen(cluster)
+        # mesh.show_mesh()
+        mesh.save_points_us(classes[key][0])

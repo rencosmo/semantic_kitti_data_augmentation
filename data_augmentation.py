@@ -109,6 +109,8 @@ def injectObj(scan, label, model_path, model_label, bb_dim, model_num, freeSpace
         if model_index[0].shape[0]>0:
           model_num = np.random.choice(model_index[0], 1) # chosen a model
           cluster = np.load(model_path+model_names[model_num[0]]) # load model
+          if np.random.random_sample()<0.5:  # left-right flip 50% models 
+            cluster[:, 0] = -cluster[:, 0]
           cluster_trans, cluster_label = cluster_translate(cluster, anchor, model_label)
           scan = np.vstack((scan, cluster_trans))
           label = np.hstack((label, cluster_label))
@@ -262,9 +264,34 @@ if __name__ == '__main__':
   label = label.reshape((-1)) & 0xFFFF
 
   model_path = '/home/cosmo/workspace/dataaug/person/'
-
   ori_scan_num = scan.shape[0]
   bb_dim = 1.0
   model_label = 30
-  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 100, [40, 44, 48], [0.80, 0.1, 0.1])
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.80, 0.1, 0.1])
+  
+  model_path = '/home/cosmo/workspace/dataaug/truck/'
+  model_label = 18
+  bb_dim = 3
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.95, 0.05, 0.0])
+
+  model_path = '/home/cosmo/workspace/dataaug/moving-bicyclist/'
+  model_label = 255
+  bb_dim = 2.5
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.95, 0.00, 0.0])
+
+  model_path = '/home/cosmo/workspace/dataaug/moving-bus/'
+  model_label = 257
+  bb_dim = 3
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.95, 0.00, 0.0])  
+
+  model_path = '/home/cosmo/workspace/dataaug/bicycle/'
+  model_label = 11
+  bb_dim = 2.5
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.0, 0.60, 0.4])   
+
+  model_path = '/home/cosmo/workspace/dataaug/motorcycle/'
+  model_label = 15
+  bb_dim = 2.5
+  scan, label = injectObj(scan, label, model_path, model_label, bb_dim, 5, [40, 44, 48], [0.0, 0.60, 0.4])   
+
   scan_display(scan, label)

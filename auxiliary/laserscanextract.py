@@ -12,7 +12,7 @@ class LaserScanExtract:
   """Class that creates and handles a visualizer for a pointcloud"""
 
   def __init__(self, scan, scan_names, label_names, offset=0,
-               semantics=True, instances=False, classid=51):
+               semantics=True, instances=False, classid=51, min_point_num=50):
     self.scan = scan
     self.scan_names = scan_names
     self.label_names = label_names
@@ -21,6 +21,7 @@ class LaserScanExtract:
     self.semantics = semantics
     self.instances = instances
     self.classid = classid
+    self.min_point_num = min_point_num
     # sanity check
     if not self.semantics and self.instances:
       print("Instances are only allowed in when semantics=True")
@@ -136,8 +137,8 @@ class LaserScanExtract:
 
       ind = np.where(self.scan.sem_label==self.classid)
 
-      if ind[0].size > 200:
-        print(self.scan_names[offset], ind[0].size)
+      if ind[0].size > self.min_point_num:
+        # print(self.scan_names[offset], ind[0].size)
         cluster = np.hstack((self.scan.points[ind[0], :], np.expand_dims(self.scan.remissions[ind[0]], axis=1) ))
         clusters.append(cluster)
         # np.savetxt("cluster"+str(ind[0].size)+"_"+str(count)+".txt", cluster )

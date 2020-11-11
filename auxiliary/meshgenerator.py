@@ -3,6 +3,7 @@
 import open3d as o3d
 import numpy as np
 import numba as nb
+import os
 
 import matplotlib.pyplot as plt
 
@@ -101,6 +102,8 @@ class meshGen:
     o3d.visualization.draw_geometries([pcd])
 
   def save_points_us(self, header):
-    outfile = header+"_"+str( int( np.round(self.dis_mean*100) ) )+"_"+str(self.points_us.shape[0])+".npy"
+    if not os.path.exists(header):
+      os.makedirs(header)
+    outfile = "./"+header+"/"+header+"_"+str( int( np.round(self.dis_mean*100) ) )+"_"+str(self.points_us.shape[0])+".npy"
     np.save(outfile, self.points_us)
 
